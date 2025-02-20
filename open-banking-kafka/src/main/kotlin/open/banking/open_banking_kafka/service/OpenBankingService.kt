@@ -3,21 +3,15 @@ package open.banking.open_banking_kafka.service
 
 import open.banking.open_banking_kafka.entity.*
 import open.banking.open_banking_kafka.repository.AccountRepository
+import open.banking.open_banking_kafka.repository.TransactionRepository
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.stereotype.Service
-import java.lang.Exception
-import java.lang.reflect.Executable
-import java.time.LocalDateTime
-import java.util.*
-import kotlin.jvm.optionals.getOrElse
 import kotlin.jvm.optionals.getOrNull
 
 @Service
-class OpenBankingService(val accountRepository: AccountRepository) {
-//    private val accounts = mutableListOf(
-//        Account("123456", 1000.0), Account("789012", 500.0)
-//    )
-
-    private val transactions = mutableListOf<Transaction>()
+class OpenBankingService(val accountRepository: AccountRepository, val transactionRepository: TransactionRepository) {
+//    private val transactions = mutableListOf<Transaction>()
 
     private val DAILY_LIMIT = 500
 
@@ -29,44 +23,54 @@ class OpenBankingService(val accountRepository: AccountRepository) {
         return accounts
     }
 
-    fun getAccountById(accountId: String): Optional<Account> {
-        return accountRepository.findById(accountId)
+    fun getAccountById(accountId: String): ResponseEntity<Account> {
+        val accountById = accountRepository.findById(accountId)
+        return if (accountById.isPresent) {
+            ResponseEntity.ok(accountById.get())
+        } else {
+            ResponseEntity.notFound().build()
+        }
     }
 
 
     //Add new account
-    fun addAccount(accountNumber: String) {
+    fun addAccount(accountNumber: String): ResponseEntity<Account> {
         val existingAccount = accountRepository.findById(accountNumber).getOrNull()
-        if (existingAccount == null) {
-            accountRepository.save(Account(accountNumber, 0.00))
-            println("Account with number $accountNumber is successfully added.")
+        return if (existingAccount == null) {
+            val newAccount = Account(accountNumber, 0.00)
+            accountRepository.save(newAccount)
+            ResponseEntity.status(HttpStatus.CREATED).body(newAccount)
         } else {
-            throw Exception("Account already exists")
+            ResponseEntity.status(HttpStatus.CONFLICT).body(null)
         }
     }
-//
-//    // Check balance for an account
-//    fun checkBalance(accountNumber: String) {
-//        val account = accounts.find { it.accountNumber == accountNumber }
-//        if (account != null) {
-//            println("Balance for account $accountNumber: ${account.balance}")
-//        } else {
-//            println("Account not found!")
-//        }
-//    }
-//
-//    // Show recent transactions
-//    fun showTransactions() {
-//        if (transactions.isEmpty()) {
-//            println("No transactions available.")
-//            return
-//        }
-//        println("Recent Transactions:")
-//        transactions.forEach {
-//            println("Transaction type: ${it.transactionType}, with message: ${it.message}, Amount: ${it.amount}")
-//        }
-//    }
-//
+
+    // Check balance for an account
+    fun checkBalance(accountId: String): ResponseEntity<Double> {
+        val account = accountRepository.findById(accountId).getOrNull()
+        return if (account != null) {
+            val balance = account.balance
+            ResponseEntity.ok(balance)
+        } else {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+        }
+    }
+
+    // Show all transactions for an account
+    fun showTransactions(accountId: String): ResponseEntity<Any> {
+        val account = accountRepository.findById(accountId).getOrNull()
+        val transactions = transactionRepository.findAllByAccountId(accountId)
+        return if (account == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(mapOf("status" to 404, "message" to "Account Id not found"))
+        } else if (transactions != null) {
+            ResponseEntity.ok(transactions)
+        } else {
+            ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(mapOf("status" to 404, "message" to "No Transaction found for this account"))
+        }
+    }
+
 //    // Transfer money between accounts
 //    fun transferMoney(from: String, to: String, amount: Double, message: String) {
 //        val fromAccount = accounts.find { it.accountNumber == from }

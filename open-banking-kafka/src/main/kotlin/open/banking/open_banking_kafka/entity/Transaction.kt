@@ -6,5 +6,10 @@ import open.banking.open_banking_kafka.enums.TransactionTypeEnum
 
 @Entity
 data class Transaction(
-    @Id val accountNumber: String, val transactionType: TransactionTypeEnum, val message: String, val amount: Double
+    @Id
+    val transactionId: String,
+    val accountId: String,
+    val transactionType: TransactionTypeEnum,
+    val message: String,
+    val amount: Double
 )
