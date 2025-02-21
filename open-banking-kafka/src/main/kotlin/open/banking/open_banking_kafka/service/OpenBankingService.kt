@@ -3,9 +3,7 @@ package open.banking.open_banking_kafka.service
 
 import open.banking.open_banking_kafka.entity.*
 import open.banking.open_banking_kafka.enums.TransactionTypeEnum
-import open.banking.open_banking_kafka.repository.AccountRepository
-import open.banking.open_banking_kafka.repository.TransactionRepository
-import open.banking.open_banking_kafka.repository.WithdrawDailyLimitRepository
+import open.banking.open_banking_kafka.repository.*
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.stereotype.Service
@@ -18,10 +16,10 @@ import kotlin.jvm.optionals.getOrNull
 class OpenBankingService(
     val accountRepository: AccountRepository,
     val transactionRepository: TransactionRepository,
-    val withdrawDailyLimitRepository: WithdrawDailyLimitRepository
+    val withdrawDailyLimitRepository: WithdrawDailyLimitRepository,
+    val loanRepository: LoanRepository,
+    val loanRepaymentRepository: LoanRepaymentRepository
 ) {
-//    private val transactions = mutableListOf<Transaction>()
-
     private val DAILY_LIMIT = 500
 
     // Show account details
@@ -176,104 +174,128 @@ class OpenBankingService(
         }
     }
 
-//
-//    fun payMonthlyDebt(
-//        loans: MutableMap<String, LoanInformation>,
-//        monthlyLoanPayments: MutableMap<String, MutableList<LoanPayment>>,
-//        accountNumber: String
-//    ) {
-//        val account = accounts.find { it.accountNumber == accountNumber }
-//        if (account == null) {
-//            println("This account does not exist.")
-//            return
-//        }
-//
-//        val loanForAccount = loans[accountNumber]
-//        if (loanForAccount == null) {
-//            println("This account does not have an active loan.")
-//            return
-//        }
-//        if (account.balance < loanForAccount.fixedMonthlyPayment) {
-//            println("Not enough balance in account $accountNumber to pay ${loanForAccount.fixedMonthlyPayment}.")
-//        }
-//        val loanPayments = monthlyLoanPayments[accountNumber] ?: mutableListOf() // ✅ Ensure non-null list
-//        val currentMonth = LocalDateTime.now().monthValue
-//
-//        if (loanPayments.any { it.paymentDate.monthValue == currentMonth }) {
-//            println("⚠️ Loan for account $accountNumber has already been paid this month.")
-//            return
-//        }
-//
-//        // Process loan payment
-//        val newLoanPayment = LoanPayment(
-//            paymentDate = LocalDateTime.now(),
-//            paymentAmount = loanForAccount.fixedMonthlyPayment,
-//            accountNumber = accountNumber
-//        )
-//
-//        // Add the new payment to the list for the account
-//        loanPayments.add(newLoanPayment)
-//        loanForAccount.remainingLoanAmount -= loanForAccount.fixedMonthlyPayment
-//        account.balance -= loanForAccount.fixedMonthlyPayment
-//
-//        println("✅ Payment of ${loanForAccount.fixedMonthlyPayment} made for account $accountNumber.")
-//        println("💰 New balance: ${account.balance}, Remaining Loan: ${loanForAccount.remainingLoanAmount}")
-//
-//        transactions.add(
-//            Transaction(
-//                accountNumber,
-//                TransactionType.LOAN_REPAYMENT,
-//                message = "Loan Repayment for account $accountNumber",
-//                amount = loanForAccount.fixedMonthlyPayment
-//            )
-//        )
-//
-//        // ✅ Remove loan if fully paid
-//        if (loanForAccount.remainingLoanAmount <= 0) {
-//            loanForAccount.isLoanActive = false
-//            println("🎉 Loan for account $accountNumber fully paid! Removing from records.")
-//            loans.remove(accountNumber)
-//            monthlyLoanPayments.remove(accountNumber)
-//        }
-//    }
-//
-//
-//    fun addLoan(
-//        loans: MutableMap<String, LoanInformation>,
-//        accountNumber: String,
-//        loanAmount: Double,
-//        fixedMonthlyPayment: Double
-//    ) {
-//        //TODO: Add this check as a function to call everywhere
-//        val account = accounts.find { it.accountNumber == accountNumber }
-//        if (account == null) {
-//            println("This account does not exist")
-//            return
-//        }
-//        //TODO: add a status isLoanActive,
-//        // if loan has been paid off user can apply for another
-//        //Check if user has already an active loan
-//        val existingLoan = loans[accountNumber]
-//        if (existingLoan != null && existingLoan.isLoanActive) {
-//            println("This account already has an active loan.")
-//            return
-//        }
-//        val newLoan = LoanInformation(
-//            accountNumber,
-//            originalLoanAmount = loanAmount,
-//            remainingLoanAmount = loanAmount,
-//            fixedMonthlyPayment = fixedMonthlyPayment,
-//            LocalDateTime.now()
-//        )
-//        transactions.add(
-//            Transaction(
-//                accountNumber, TransactionType.LOAN_APPLICATION, message = "Loan Repayment", amount = loanAmount
-//            )
-//        )
-//        loans[accountNumber] = newLoan
-//        account.balance += loanAmount
-//        println("Loan of $loanAmount granted to account $accountNumber. New balance is ${account.balance}.")
-//    }
+    //ADD loan
+    fun addLoan(
+        accountId: String, loanAmount: Double
+    ): Loan {
+        val account = accountRepository.findById(accountId).orElseThrow {
+            IllegalArgumentException("Account $accountId not found")
+        }
+
+        //Check if user has already an active loan
+        val existingLoan = loanRepository.findByAccountId(accountId).firstOrNull { it.isActive }
+        if (existingLoan != null) {
+            throw IllegalArgumentException("This account already has an active loan.")
+        }
+
+        val newLoan = Loan(
+            loanId = UUID.randomUUID().toString(),
+            accountId = accountId,
+            principalAmount = loanAmount,
+            outstandingBalance = loanAmount,
+            interestRate = 5.0,
+            termMonths = 12,
+            lastPaymentDate = LocalDateTime.now(),
+            isActive = true
+        )
+
+        val savedLoan = loanRepository.save(newLoan)
+
+        val transaction = Transaction(
+            transactionId = UUID.randomUUID().toString(),
+            accountId = accountId,
+            transactionType = TransactionTypeEnum.LOAN_APPLICATION,
+            message = "Loan of $loanAmount granted",
+            amount = loanAmount
+        )
+        transactionRepository.save(transaction)
+
+        account.balance += loanAmount
+        accountRepository.save(account)
+
+        return savedLoan
+    }
+
+
+    //
+    fun repayLoan(accountId: String): ResponseEntity<Any> {
+        // Fetch account
+        val account = accountRepository.findById(accountId).orElseThrow {
+            IllegalArgumentException("❌ Account $accountId does not exist.")
+        }
+
+        // Fetch active loan
+        val loanForAccount = loanRepository.findByAccountIdAndIsActive(accountId, true)
+            ?: return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                mapOf("status" to 400, "message" to "No active loan for this account.")
+            )
+
+        if (!loanForAccount.isActive) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                mapOf("status" to 400, "message" to "❌ This loan has already been paid off.")
+            )
+        }
+
+        // Get last repayment
+        val lastRepayment =
+            loanRepaymentRepository.findTopByLoanIdOrderByPaymentDateDesc(loanForAccount.loanId).firstOrNull()
+        val currentMonth = LocalDateTime.now().monthValue
+
+        if (lastRepayment != null && lastRepayment.paymentDate.monthValue == currentMonth) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                mapOf("status" to 400, "message" to "❌ Loan payment for this month has already been made.")
+            )
+        }
+
+        // Calculate monthly payment
+        val monthlyPayment = loanForAccount.calculateMonthlyPayment()
+
+        // Check account balance
+        if (account.balance < monthlyPayment) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                mapOf("status" to 400, "message" to "❌ Insufficient funds to pay the monthly installment.")
+            )
+        }
+
+        // Deduct payment from account balance
+        account.balance -= monthlyPayment
+        accountRepository.save(account)
+
+        // Deduct payment from loan balance
+        loanForAccount.outstandingBalance -= monthlyPayment
+        if (loanForAccount.outstandingBalance <= 0) {
+            loanForAccount.isActive = false
+        }
+        loanRepository.save(loanForAccount)
+
+        // Save repayment record
+        val repayment = LoanRepayment(
+            repaymentId = UUID.randomUUID().toString(),
+            loanId = loanForAccount.loanId,
+            accountId = accountId,
+            amountPaid = monthlyPayment,
+            paymentDate = LocalDateTime.now()
+        )
+        loanRepaymentRepository.save(repayment)
+
+        // Save transaction
+        val transaction = Transaction(
+            transactionId = UUID.randomUUID().toString(),
+            accountId = accountId,
+            transactionType = TransactionTypeEnum.LOAN_REPAYMENT,
+            message = "Monthly loan repayment of $monthlyPayment",
+            amount = monthlyPayment
+        )
+        transactionRepository.save(transaction)
+
+        return ResponseEntity.ok(
+            mapOf(
+                "status" to 200,
+                "message" to "✅ Loan repayment successful.",
+                "remainingBalance" to loanForAccount.outstandingBalance
+            )
+        )
+    }
 
 }
 
