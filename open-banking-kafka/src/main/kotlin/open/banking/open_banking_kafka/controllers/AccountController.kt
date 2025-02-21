@@ -80,4 +80,18 @@ class AccountController(val openBankingService: OpenBankingService) {
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.message)
         }
     }
+
+    @PostMapping("/withdraw/{accountId}")
+    fun withdraw(@PathVariable accountId: String, @RequestParam amount: Double): ResponseEntity<Any>{
+        return try {
+            val transaction = openBankingService.withdrawMoney(accountId, amount)
+            ResponseEntity.status(HttpStatus.CREATED).body(transaction)
+        }
+        catch (e: IllegalArgumentException){
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.message)
+        }
+        catch (e: Exception){
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.message)
+        }
+    }
 }

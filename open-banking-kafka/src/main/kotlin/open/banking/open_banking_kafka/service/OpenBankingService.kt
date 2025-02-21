@@ -5,14 +5,21 @@ import open.banking.open_banking_kafka.entity.*
 import open.banking.open_banking_kafka.enums.TransactionTypeEnum
 import open.banking.open_banking_kafka.repository.AccountRepository
 import open.banking.open_banking_kafka.repository.TransactionRepository
+import open.banking.open_banking_kafka.repository.WithdrawDailyLimitRepository
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.stereotype.Service
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
 @Service
-class OpenBankingService(val accountRepository: AccountRepository, val transactionRepository: TransactionRepository) {
+class OpenBankingService(
+    val accountRepository: AccountRepository,
+    val transactionRepository: TransactionRepository,
+    val withdrawDailyLimitRepository: WithdrawDailyLimitRepository
+) {
 //    private val transactions = mutableListOf<Transaction>()
 
     private val DAILY_LIMIT = 500
@@ -102,11 +109,11 @@ class OpenBankingService(val accountRepository: AccountRepository, val transacti
 
     //Deposit money to an account
     fun depositMoney(accountId: String, amount: Double): Transaction {
-        val accountToDeposit = accountRepository.findById(accountId).orElseThrow{
+        val accountToDeposit = accountRepository.findById(accountId).orElseThrow {
             IllegalArgumentException("Account $accountId not found")
         }
         if (amount <= 0) {
-            IllegalArgumentException("Add an amount greater than 0.00")
+            throw IllegalArgumentException("Add an amount greater than 0.00")
         }
 
         accountToDeposit.balance += amount
@@ -120,46 +127,55 @@ class OpenBankingService(val accountRepository: AccountRepository, val transacti
         )
         return transactionRepository.save(transaction)
     }
-//
-//    //Withdraw money
-//    fun withdrawMoney(withdrawnLimit: MutableList<DailyLimit>, accountNumber: String, amount: Double) {
-//        val accountToWithdraw = accounts.find { it.accountNumber == accountNumber }
-//        if (accountToWithdraw == null) {
-//            println("This account does not exist")
-//            return
-//        }
-//        if (amount > accountToWithdraw.balance) {
-//            println("You do not have kaq shum lek")
-//            return
-//        }
-//        if (amount > DAILY_LIMIT) {
-//            println("You passed the limit")
-//            return
-//        }
-//        checkDailyLimit(withdrawnLimit, accountNumber, amount, accountToWithdraw)
-//        transactions.add(Transaction(accountNumber, TransactionType.WITHDRAWAL, message = "Withdraw", amount))
-//
-//        println("New balance for account $accountNumber is ${accountToWithdraw.balance}")
-//    }
-//
-//    private fun checkDailyLimit(
-//        withdrawnLimit: MutableList<DailyLimit>, accountNumber: String, amount: Double, currentAccount: Account
-//    ) {
-//        val withdrawAccount = withdrawnLimit.firstOrNull { it.accountId == accountNumber }
-//        if (withdrawAccount == null) {
-//            withdrawnLimit.add(DailyLimit(accountNumber, amount, LocalDateTime.now()))
-//        } else {
-//            //TODO: fix date check (chrono calendar)
-//            if (withdrawAccount.withdrawnAmount + amount > DAILY_LIMIT && withdrawAccount.date.dayOfMonth == LocalDateTime.now().dayOfMonth) {
-//                println("You have passed the limit")
-//                return
-//            } else {
-//                withdrawAccount.withdrawnAmount += amount
-//                withdrawAccount.date = LocalDateTime.now()
-//                currentAccount.balance -= amount
-//            }
-//        }
-//    }
+
+    //Withdraw money
+    fun withdrawMoney(accountId: String, amount: Double): Transaction {
+        val accountToWithdraw = accountRepository.findById(accountId).orElseThrow {
+            IllegalArgumentException("Account $accountId not found")
+        }
+        if (amount <= 0) {
+            throw IllegalArgumentException("This account does not have that amount")
+        }
+        if (amount > DAILY_LIMIT) {
+            throw IllegalArgumentException("Daily withdrawal limit exceeded")
+        }
+        checkDailyLimit(accountId, amount, accountToWithdraw)
+        accountToWithdraw.balance -= amount
+        accountRepository.save(accountToWithdraw)
+
+        val transaction = Transaction(
+            transactionId = UUID.randomUUID().toString(),
+            accountId = accountId,
+            transactionType = TransactionTypeEnum.WITHDRAWAL,
+            message = "Withdrew $amount from account $accountId",
+            amount = amount
+        )
+        return transactionRepository.save(transaction)
+    }
+
+    private fun checkDailyLimit(
+        accountId: String, amount: Double, currentAccount: Account
+    ) {
+        val withdrawnList = withdrawDailyLimitRepository.findAllByAccountId(accountId)
+
+        val withdrawAccount = withdrawnList.filter { it.date.toLocalDate() == LocalDate.now() }.maxByOrNull { it.date }
+
+        if (withdrawAccount == null) {
+            withdrawDailyLimitRepository.save(
+                WithdrawDailyLimit(
+                    UUID.randomUUID().toString(), accountId, amount, LocalDateTime.now()
+                )
+            )
+        } else {
+            if (withdrawAccount.withdrawnAmount + amount > DAILY_LIMIT) {
+                throw IllegalArgumentException("❌ Daily withdrawal limit exceeded")
+            }
+            withdrawAccount.withdrawnAmount += amount
+            withdrawAccount.date = LocalDateTime.now()
+            withdrawDailyLimitRepository.save(withdrawAccount)
+        }
+    }
+
 //
 //    fun payMonthlyDebt(
 //        loans: MutableMap<String, LoanInformation>,
