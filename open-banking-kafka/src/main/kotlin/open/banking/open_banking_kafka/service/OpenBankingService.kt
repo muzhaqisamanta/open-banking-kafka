@@ -2,11 +2,13 @@ package open.banking.open_banking_kafka.service
 
 
 import open.banking.open_banking_kafka.entity.*
+import open.banking.open_banking_kafka.enums.TransactionTypeEnum
 import open.banking.open_banking_kafka.repository.AccountRepository
 import open.banking.open_banking_kafka.repository.TransactionRepository
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.stereotype.Service
+import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
 @Service
@@ -71,41 +73,53 @@ class OpenBankingService(val accountRepository: AccountRepository, val transacti
         }
     }
 
-//    // Transfer money between accounts
-//    fun transferMoney(from: String, to: String, amount: Double, message: String) {
-//        val fromAccount = accounts.find { it.accountNumber == from }
-//        val toAccount = accounts.find { it.accountNumber == to }
-//
-//        if (fromAccount == null || toAccount == null) {
-//            println("One of the accounts does not exist!")
-//            return
-//        }
-//        if (fromAccount.balance < amount) {
-//            println("Insufficient funds!")
-//            return
-//        }
-//
-//        fromAccount.balance -= amount
-//        toAccount.balance += amount
-//        transactions.add(Transaction(accountNumber = from, TransactionType.TRANSFER, message, amount))
-//        println("Transfer successful: $amount transferred from $from to $to")
-//    }
-//
-//    //Deposit money to an account
-//    fun depositMoney(accountNumber: String, amount: Double) {
-//        val accountToDeposit = accounts.find { it.accountNumber == accountNumber }
-//        if (accountToDeposit == null) {
-//            println("This account does not exist")
-//            return
-//        }
-//        if (amount <= 0) {
-//            println("Add a number greater than 0")
-//            return
-//        }
-//        accountToDeposit.balance += amount
-//        transactions.add(Transaction(accountNumber, TransactionType.DEPOSIT, message = "DEPOSIT", amount))
-//        println("New balance for account $accountNumber is ${accountToDeposit.balance}")
-//    }
+    // Transfer money between accounts
+    fun transferMoney(fromAccountId: String, toAccountId: String, amount: Double): Transaction {
+        val fromAccount = accountRepository.findById(fromAccountId).orElseThrow {
+            IllegalArgumentException("Sender account not found")
+        }
+        val toAccount = accountRepository.findById(toAccountId).orElseThrow {
+            IllegalArgumentException("Receiver account not found")
+        }
+        if (fromAccount.balance < amount) {
+            throw IllegalArgumentException("Insufficient funds")
+        }
+
+        fromAccount.balance -= amount
+        toAccount.balance += amount
+        accountRepository.save(fromAccount)
+        accountRepository.save(toAccount)
+
+        val transaction = Transaction(
+            transactionId = UUID.randomUUID().toString(),
+            accountId = fromAccountId,
+            transactionType = TransactionTypeEnum.TRANSFER,
+            message = "Transferred $amount to account $toAccountId",
+            amount = amount
+        )
+        return transactionRepository.save(transaction)
+    }
+
+    //Deposit money to an account
+    fun depositMoney(accountId: String, amount: Double): Transaction {
+        val accountToDeposit = accountRepository.findById(accountId).orElseThrow{
+            IllegalArgumentException("Account $accountId not found")
+        }
+        if (amount <= 0) {
+            IllegalArgumentException("Add an amount greater than 0.00")
+        }
+
+        accountToDeposit.balance += amount
+        accountRepository.save(accountToDeposit)
+        val transaction = Transaction(
+            transactionId = UUID.randomUUID().toString(),
+            accountId = accountId,
+            transactionType = TransactionTypeEnum.DEPOSIT,
+            message = "Deposited $amount to account $accountId",
+            amount = amount
+        )
+        return transactionRepository.save(transaction)
+    }
 //
 //    //Withdraw money
 //    fun withdrawMoney(withdrawnLimit: MutableList<DailyLimit>, accountNumber: String, amount: Double) {
