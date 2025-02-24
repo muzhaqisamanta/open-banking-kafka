@@ -5,6 +5,9 @@
     <option name="originalFiles">
       <list>
         <option value="$PROJECT_DIR$/open-banking-kafka/pom.xml" />
+        <option value="$PROJECT_DIR$/core-module/pom.xml" />
+        <option value="$PROJECT_DIR$/third-party-provider/pom.xml" />
+        <option value="$PROJECT_DIR$/pom.xml" />
       </list>
     </option>
   </component>
