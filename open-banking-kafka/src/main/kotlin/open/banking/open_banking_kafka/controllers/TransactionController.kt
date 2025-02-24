@@ -14,11 +14,7 @@ import org.springframework.web.bind.annotation.RestController
 class TransactionController(val openBankingService: OpenBankingService) {
     @GetMapping("/{accountId}")
     fun getAllTransactions(@PathVariable accountId: String): ResponseEntity<Any> {
-        return try {
-            openBankingService.showTransactions(accountId)
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null)
-        }
+        return openBankingService.showTransactions(accountId)
     }
 
 

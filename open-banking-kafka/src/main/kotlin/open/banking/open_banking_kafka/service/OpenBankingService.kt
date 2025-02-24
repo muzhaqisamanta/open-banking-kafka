@@ -41,40 +41,39 @@ class OpenBankingService(
 
 
     //Add new account
-    fun addAccount(accountNumber: String): ResponseEntity<Account> {
+    fun addAccount(accountNumber: String): ResponseEntity<Any> {
         val existingAccount = accountRepository.findById(accountNumber).getOrNull()
         return if (existingAccount == null) {
             val newAccount = Account(accountNumber, 0.00)
             accountRepository.save(newAccount)
             ResponseEntity.status(HttpStatus.CREATED).body(newAccount)
         } else {
-            ResponseEntity.status(HttpStatus.CONFLICT).body(null)
+            ResponseEntity.status(HttpStatus.CONFLICT).body("Account with id $accountNumber exists.")
         }
     }
 
     // Check balance for an account
-    fun checkBalance(accountId: String): ResponseEntity<Double> {
-        val account = accountRepository.findById(accountId).getOrNull()
-        return if (account != null) {
-            val balance = account.balance
-            ResponseEntity.ok(balance)
+    fun checkBalance(accountId: String): ResponseEntity<Any> {
+        val account = accountRepository.findById(accountId).orElse(null)
+        return if (account == null) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body("Account ID not found")
         } else {
-            ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+            ResponseEntity.ok(account.balance)
         }
     }
 
     // Show all transactions for an account
     fun showTransactions(accountId: String): ResponseEntity<Any> {
-        val account = accountRepository.findById(accountId).getOrNull()
+        val account = accountRepository.findById(accountId).orElse(null)
         val transactions = transactionRepository.findAllByAccountId(accountId)
-        return if (account == null) {
+        if (account == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(mapOf("status" to 404, "message" to "Account Id not found"))
-        } else if (transactions != null) {
+                .body("Account Id not found")
+        }
+        return if (transactions.isNotEmpty()) {
             ResponseEntity.ok(transactions)
         } else {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(mapOf("status" to 404, "message" to "No Transaction found for this account"))
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body("No Transaction found for this account")
         }
     }
 
