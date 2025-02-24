@@ -5,8 +5,11 @@ import jakarta.persistence.Id
 import java.time.LocalDateTime
 
 @Entity
-data class LoanPayment(
-    @Id val accountNumber: String,
-    val paymentAmount: Double,
+data class LoanRepayment(
+    @Id
+    val repaymentId: String,
+    val loanId: String,
+    val accountId: String,
+    val amountPaid: Double,
     var paymentDate: LocalDateTime
 )

@@ -6,8 +6,10 @@ import java.time.LocalDateTime
 
 @Entity
 //TODO: Change to TransactionLimit
-data class DailyLimit (
-    @Id val accountId: String,
+data class WithdrawDailyLimit (
+    @Id
+    val withdrawId: String,
+    val accountId: String,
     var withdrawnAmount: Double,
     var date: LocalDateTime
 )

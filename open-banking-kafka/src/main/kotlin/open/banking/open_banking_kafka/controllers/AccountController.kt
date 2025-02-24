@@ -3,35 +3,78 @@ package open.banking.open_banking_kafka.controllers
 import open.banking.open_banking_kafka.entity.Account
 import open.banking.open_banking_kafka.service.OpenBankingService
 import org.springframework.http.HttpStatus
-import org.springframework.http.HttpStatusCode
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.lang.IllegalArgumentException
 
 @RestController
-@RequestMapping("/api/v1/openbanking")
+@RequestMapping("/api/v1/openbanking/accounts")
 
 class AccountController(val openBankingService: OpenBankingService) {
 
-    @GetMapping("/accounts")
+    @GetMapping("")
     fun getAllAccounts(): ResponseEntity<List<Account>> {
         return ResponseEntity.ok(openBankingService.showAccounts())
     }
 
-    @GetMapping("/accounts/{accountId}")
+    @GetMapping("/{accountId}")
     fun getAccountById(@PathVariable accountId: String): ResponseEntity<Account> {
+        return openBankingService.getAccountById(accountId)
+    }
+
+    @PostMapping("/{accountNumber}")
+    fun addAccount(@PathVariable accountNumber: String): ResponseEntity<Any> {
+        return openBankingService.addAccount(accountNumber)
+    }
+
+    @GetMapping("/{accountId}/balance")
+    fun getBalanceByAccountId(@PathVariable accountId: String): ResponseEntity<Any> {
+        return openBankingService.checkBalance(accountId)
+    }
+
+    @PostMapping("/{fromAccountId}/transfer/{toAccountId}")
+    fun transferMoney(
+        @PathVariable fromAccountId: String,
+        @PathVariable toAccountId: String,
+        @RequestParam amount: Double,
+    ): ResponseEntity<Any> {
         return try {
-            val account = openBankingService.getAccountById(accountId)
-            if (account.isPresent) {
-                ResponseEntity.ok(account.get()) // 200 OK
-            } else {
-                ResponseEntity.status(HttpStatus.NOT_FOUND).build() // 404 Not Found
-            }
+            val transaction = openBankingService.transferMoney(fromAccountId, toAccountId, amount)
+            ResponseEntity.status(HttpStatus.CREATED).body(transaction)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.message)
         } catch (e: Exception) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null)
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.message)
+        }
+    }
+
+
+    @PostMapping("/deposit/{accountId}")
+    fun deposit(@PathVariable accountId: String, @RequestParam amount: Double): ResponseEntity<Any> {
+        return try {
+            val transaction = openBankingService.depositMoney(accountId, amount)
+            ResponseEntity.status(HttpStatus.CREATED).body(transaction)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.message)
+        } catch (e: Exception) {
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.message)
+        }
+    }
+
+    @PostMapping("/withdraw/{accountId}")
+    fun withdraw(@PathVariable accountId: String, @RequestParam amount: Double): ResponseEntity<Any> {
+        return try {
+            val transaction = openBankingService.withdrawMoney(accountId, amount)
+            ResponseEntity.status(HttpStatus.CREATED).body(transaction)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.message)
+        } catch (e: Exception) {
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.message)
         }
     }
 }
