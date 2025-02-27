@@ -10,6 +10,8 @@
 	</parent>
 
 	<artifactId>open-banking-kafka</artifactId>
+	<packaging>jar</packaging>
+
 	<description>Demo project for Spring Boot + Kotlin + Kafka</description>
 	<url/>
 	<licenses>

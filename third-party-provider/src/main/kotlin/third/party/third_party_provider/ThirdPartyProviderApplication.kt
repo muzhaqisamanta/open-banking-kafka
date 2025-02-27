@@ -1,11 +1,11 @@
-package open.banking.open_banking_kafka
+package third.party.third_party_provider
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 
 @SpringBootApplication
-class OpenBankingKafkaApplication
+class ThirdPartyProviderApplication
 
 fun main(args: Array<String>) {
-	runApplication<OpenBankingKafkaApplication>(*args)
+    runApplication<ThirdPartyProviderApplication>(*args)
 }
